@@ -24,14 +24,14 @@ See where your Claude Code tokens go. Cost tracking for Claude AI projects by ta
 - Python 3.11+
 - Claude Code installed with session data at `~/.claude/projects/`
 
-### Install from PyPI
+### Install from PyPI (recommended)
 ```bash
 pip install kalima
 ```
 
 ### Or install from source
 ```bash
-git clone https://github.com/yourusername/kalima.git
+git clone https://github.com/janmaru/mahamudra-kalima.git
 cd kalima
 pip install -e .
 ```
@@ -39,45 +39,59 @@ pip install -e .
 ## Quick Start
 
 ```bash
-# Interactive dashboard (default: 7 days)
-kalima
+# Interactive dashboard (7-day view with tables)
+kalima dashboard
 
 # Today's usage
 kalima today
 
-# Last 30 days
+# Last 30 days report
 kalima report --days 30
 
-# Export as JSON
-kalima export -f json
+# This month
+kalima month
+
+# Export as JSON (includes today/7d/30d summaries)
+kalima export --format json
+
+# Export as CSV
+kalima export --format csv --output costs.csv
 
 # Set currency to GBP
 kalima currency GBP
 
 # Show current settings
 kalima status
+
+# Quick status (today + month in one line)
+kalima status --format text
+
+# Show version
+kalima version
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `kalima` | Interactive dashboard (7-day view) |
+| `kalima dashboard` | Interactive dashboard with Rich tables |
 | `kalima today` | Today's cost and token breakdown |
-| `kalima report` | 7-day rolling window (or customize with `--days`) |
+| `kalima report [--days N]` | Rolling N-day report (default: 7) |
 | `kalima month` | This calendar month |
-| `kalima status` | One-line summary (today + month) |
-| `kalima export` | CSV export (today, 7d, 30d) |
-| `kalima export -f json` | JSON export |
-| `kalima currency GBP` | Set display currency |
-| `kalima currency` | Show current currency setting |
-| `kalima currency --reset` | Back to USD |
+| `kalima status` | One-line summary (text or JSON) |
+| `kalima export [--format json\|csv]` | Export with daily breakdowns |
+| `kalima currency [CODE]` | Set/show display currency |
+| `kalima currency --reset` | Reset to USD |
+| `kalima version` | Show version |
 
 ## Dashboard Navigation
 
-Once in the interactive dashboard:
-- **Arrow keys** or **1/2/3/4** — Switch between Today / 7 Days / 30 Days / Month views
-- **q** — Quit
+The interactive dashboard shows:
+- **Summary panel** — Total cost, session count, message count
+- **By Task table** — Cost and count per task category
+- **By Model table** — Cost and token count per Claude model
+
+The dashboard refreshes automatically and works on Windows, macOS, and Linux.
 
 ## What It Tracks
 
@@ -168,6 +182,57 @@ mypy src/
 # Build distribution
 python -m build
 ```
+
+## Publishing to PyPI
+
+### Prerequisites
+
+1. Create PyPI API token at https://pypi.org/manage/account/tokens/
+   - Name: `kalima-github-actions`
+   - Scope: Entire account
+
+2. Add token to GitHub Secrets:
+   - Go to: https://github.com/janmaru/mahamudra-kalima/settings/secrets/actions
+   - Add secret: `PYPI_API_TOKEN` = (your token from step 1)
+
+### Publishing a Release
+
+```bash
+# 1. Update version in pyproject.toml and src/kalima/__init__.py
+# 2. Update CHANGELOG.md with release notes
+git commit -am "chore: release v0.2.0"
+
+# 3. Create and push annotated tag (triggers publish workflow)
+git tag -a v0.2.0 -m "Release Kalima v0.2.0: Feature X and Y
+
+Features:
+- Feature X description
+- Feature Y description
+
+Fixes:
+- Bug fix description
+
+See CHANGELOG.md for full details."
+
+git push origin v0.2.0
+
+# 4. GitHub Actions automatically:
+#    - Detects v0.2.0 tag
+#    - Builds distribution (wheel + sdist)
+#    - Uploads to PyPI
+#    - Package available in 5-10 minutes
+```
+
+### Verify Publication
+
+```bash
+# Wait 5-10 minutes after workflow completes
+pip install kalima==0.2.0
+kalima version
+```
+
+See [PUBLISHING_STEPS.md](PUBLISHING_STEPS.md) for detailed guide.
+
 
 ## License
 

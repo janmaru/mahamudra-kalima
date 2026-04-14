@@ -46,7 +46,7 @@ dev = [
 ]
 
 [project.scripts]
-kalima = "kalima.cli:app"
+kalima = "kalima.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
