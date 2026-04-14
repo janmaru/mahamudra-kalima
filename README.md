@@ -144,11 +144,9 @@ For each turn:
 ## Docs
 
 Full documentation in [`docs/`](docs/):
-- [Installation & Setup](docs/install.md)
-- [Usage Guide](docs/usage.md)
-- [Architecture](docs/architecture.md)
-- [Task Classifier Details](docs/classifier.md)
-- [Contributing](docs/contributing.md)
+- [Technical Analysis](docs/technical-analysis.md) -- Architecture, data flow, classifier, pricing
+- [Functional Analysis](docs/functional-analysis.md) -- Commands, features, configuration, FAQ
+- [Contributing](docs/contributing.md) -- Development setup, release process, PyPI publishing
 
 ## Project Structure
 
@@ -231,7 +229,7 @@ pip install kalima==0.2.0
 kalima version
 ```
 
-See [PUBLISHING_STEPS.md](PUBLISHING_STEPS.md) for detailed guide.
+See [Contributing](docs/contributing.md#pypi-publishing) for detailed guide.
 
 
 ## License

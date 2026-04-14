@@ -1,8 +1,10 @@
 """Interactive dashboard for Kalima using Rich TUI."""
 
-from datetime import datetime, timedelta
+import threading
+from datetime import datetime, timezone
 from typing import Optional
 
+import readchar
 from rich.console import Console
 from rich.layout import Layout
 from rich.live import Live
@@ -17,8 +19,8 @@ from .config import get_config
 from .currency import get_converter
 
 
-def _prepare_sessions(days: int = 7, custom_claude_dir: Optional[str] = None):
-    """Load and prepare sessions."""
+def _prepare_sessions(custom_claude_dir: Optional[str] = None):
+    """Load and prepare all sessions."""
     from pathlib import Path
 
     session_files = discover_sessions(
@@ -150,6 +152,26 @@ def _create_layout(sessions: list, period_name: str, currency: str) -> Layout:
     return layout
 
 
+def _filter_for_period(
+    sessions: list, period_key: str
+) -> tuple[list, str]:
+    """Filter sessions for a given period key.
+
+    Returns:
+        (filtered_sessions, period_label)
+    """
+    if period_key == "1":
+        return filter_sessions_by_date(sessions, days=1), "Today"
+    elif period_key == "3":
+        return filter_sessions_by_date(sessions, days=30), "30 Days"
+    elif period_key == "4":
+        now = datetime.now(timezone.utc)
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        return filter_sessions_by_date_range(sessions, start, now), "This Month"
+    else:
+        return filter_sessions_by_date(sessions, days=7), "7 Days"
+
+
 def run_dashboard(custom_claude_dir: Optional[str] = None) -> None:
     """Run interactive dashboard.
 
@@ -160,25 +182,42 @@ def run_dashboard(custom_claude_dir: Optional[str] = None) -> None:
     config = get_config()
     currency = config.get_currency()
 
-    # Initial load
-    sessions = _prepare_sessions(days=7, custom_claude_dir=custom_claude_dir)
-    filtered = filter_sessions_by_date(sessions, days=7)
+    sessions = _prepare_sessions(custom_claude_dir=custom_claude_dir)
+    filtered, period = _filter_for_period(sessions, "2")
 
-    period = "7 Days"
-    period_days = 7
+    stop_event = threading.Event()
 
-    def refresh_view() -> Layout:
-        """Refresh the dashboard view."""
-        return _create_layout(filtered, period, currency)
+    def key_listener() -> None:
+        """Read keys in a background thread."""
+        nonlocal filtered, period
+        while not stop_event.is_set():
+            try:
+                key = readchar.readkey()
+            except KeyboardInterrupt:
+                stop_event.set()
+                return
+
+            if key in ("q", "Q"):
+                stop_event.set()
+                return
+
+            if key in ("1", "2", "3", "4"):
+                filtered, period = _filter_for_period(sessions, key)
+
+    listener = threading.Thread(target=key_listener, daemon=True)
+    listener.start()
 
     try:
-        with Live(refresh_view(), refresh_per_second=1, screen=True) as live:
-            while True:
-                key = console.input("")  # This doesn't work for keyboard input in Rich Live
-
-                # For now, just support static display
-                # Full interactive keyboard support would require additional libraries
-                break
-
+        with Live(
+            _create_layout(filtered, period, currency),
+            refresh_per_second=2,
+            screen=True,
+            console=console,
+        ) as live:
+            while not stop_event.is_set():
+                live.update(_create_layout(filtered, period, currency))
+                stop_event.wait(0.5)
     except KeyboardInterrupt:
-        console.print("\n[dim]Dashboard closed[/dim]")
+        stop_event.set()
+    finally:
+        console.print("[dim]Dashboard closed[/dim]")

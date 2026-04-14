@@ -1,0 +1,5 @@
+Defaulting to user installation because normal site-packages is not writeable
+Requirement already satisfied: readchar in c:\users\acer\appdata\roaming\python\python313\site-packages (4.2.2)
+
+[notice] A new release of pip is available: 25.3 -> 26.0.1
+[notice] To update, run: python.exe -m pip install --upgrade pip
