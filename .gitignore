@@ -52,3 +52,4 @@ htmlcov/
 # Git
 .git/
 .claude/settings.local.json
+errors

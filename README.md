@@ -11,7 +11,7 @@ See where your Claude Code tokens go. Cost tracking for Claude AI projects by ta
 
 - **Interactive Dashboard** — Rich TUI with gradient bars, responsive tables, keyboard navigation
 - **Task Classifier** — 13-category breakdown (Coding, Debugging, Testing, Refactoring, etc.)
-- **Multi-Period Reports** — Today, 7 days, 30 days, this month
+- **Multi-Period Reports** — Today, 7 days, 30 days, 60 days, 90 days
 - **Multi-OS Support** — Works on Windows, macOS, Linux (auto-detects paths)
 - **Currency Support** — 162 currencies with live exchange rates (cached 24h)
 - **One-Shot Success Rate** — See which tasks the AI nails first-try vs. retry cycles
@@ -37,6 +37,8 @@ pip install -e .
 ```
 
 ## Quick Start
+
+> **Note**: if `kalima` non è nel PATH, usa `python -m kalima` al posto di `kalima` in tutti i comandi seguenti.
 
 ```bash
 # Interactive dashboard (7-day view with tables)
@@ -86,12 +88,22 @@ kalima version
 
 ## Dashboard Navigation
 
-The interactive dashboard shows:
-- **Summary panel** — Total cost, session count, message count
-- **By Task table** — Cost and count per task category
-- **By Model table** — Cost and token count per Claude model
+Press number keys to switch period, `q` to quit:
 
-The dashboard refreshes automatically and works on Windows, macOS, and Linux.
+| Key | Period |
+|-----|--------|
+| `1` | Today |
+| `2` | 7 Days |
+| `3` | 30 Days |
+| `4` | 60 Days |
+| `5` | 90 Days |
+| `q` | Quit |
+
+The dashboard shows:
+- **Summary bar** — Period, total cost, sessions, messages, synthetic count
+- **By Task table** — Cost and count per task category
+- **By Model table** — Cost and messages per Claude model (excludes synthetic)
+- **Cost chart** — Vertical bar chart with color-coded bars (green/yellow/orange/red by relative cost). Adapts to period: hours for Today, days for 7/30 days, weeks for 60 days, months for 90 days
 
 ## What It Tracks
 
@@ -125,6 +137,30 @@ Config stored at `~/.config/kalima/config.json`:
 }
 ```
 
+### Custom Pricing
+
+Model pricing is loaded from `~/.config/kalima/pricing.json` if it exists, otherwise uses bundled defaults. All costs are USD per 1M tokens.
+
+To customize:
+```bash
+cp src/kalima/pricing_default.json ~/.config/kalima/pricing.json
+```
+
+Then edit the values. Example entry:
+```json
+{
+  "claude-opus-4-6": {
+    "name": "Claude Opus 4.6",
+    "input": 5.00,
+    "output": 25.00,
+    "cache_write": 10.00,
+    "cache_read": 0.50
+  }
+}
+```
+
+Cache write uses the 1-hour TTL rate (what Claude Code uses by default).
+
 ### Environment Variables
 
 | Variable | Description |
@@ -138,7 +174,7 @@ Kalima reads Claude Code session transcripts directly from disk (no proxy, no AP
 For each turn:
 1. Extract model, tokens (input/output/cache), and tool usage
 2. Classify by task category (deterministic, keyword + tool-based)
-3. Calculate cost via LiteLLM pricing (auto-cached)
+3. Calculate cost via configurable pricing table (bundled or custom)
 4. Aggregate by period, model, task, project
 
 ## Docs
@@ -155,7 +191,8 @@ src/kalima/
   cli.py            # Typer entry point
   parser.py         # JSONL reader, dedup, filtering
   classifier.py     # 13-category task classifier
-  models.py         # LiteLLM pricing for Claude
+  models.py         # Pricing loader (from JSON config)
+  pricing_default.json  # Bundled model pricing
   currency.py       # Exchange rates, formatting
   dashboard.py      # Rich TUI
   report.py         # Text report formatter
@@ -238,6 +275,6 @@ MIT — See [LICENSE](LICENSE) for details.
 
 ## Credits
 
-Inspired by [CodeBurn](https://github.com/AgentSeal/codeburn) (Node.js version with multi-provider support). Pricing from [LiteLLM](https://github.com/BerriAI/litellm). Exchange rates from [Frankfurter](https://www.frankfurter.app/).
+Inspired by [CodeBurn](https://github.com/AgentSeal/codeburn) (Node.js version with multi-provider support). Exchange rates from [Frankfurter](https://www.frankfurter.app/).
 
 Built for Claude developers tracking their AI coding costs.

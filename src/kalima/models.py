@@ -1,116 +1,84 @@
-"""Claude model pricing and cost calculations."""
+"""Claude model pricing and cost calculations.
+
+Pricing is loaded from ~/.config/kalima/pricing.json if it exists,
+otherwise falls back to the bundled pricing_default.json.
+To customize prices, copy pricing_default.json to ~/.config/kalima/pricing.json
+and edit the values. All costs are USD per 1M tokens.
+"""
+
+import json
+from importlib import resources
+from pathlib import Path
 
 from .types import ModelPricing
 
-# Claude model pricing (USD per 1M tokens)
-# Updated to match LiteLLM pricing data
-# Cache prices: write cost 25% of input, read cost 10% of input
+_pricing_cache: dict[str, ModelPricing] | None = None
 
-CLAUDE_MODELS: dict[str, ModelPricing] = {
-    # Claude 3.5 models (latest)
-    "claude-3-5-sonnet-20241022": ModelPricing(
-        name="Claude 3.5 Sonnet",
-        input_cost_per_mtok=3.0,
-        output_cost_per_mtok=15.0,
-        cache_write_cost_per_mtok=0.75,  # 25% of input
-        cache_read_cost_per_mtok=0.30,  # 10% of input
-    ),
-    "claude-3-5-opus-20250514": ModelPricing(
-        name="Claude 3.5 Opus",
-        input_cost_per_mtok=15.0,
-        output_cost_per_mtok=60.0,
-        cache_write_cost_per_mtok=3.75,  # 25% of input
-        cache_read_cost_per_mtok=1.50,  # 10% of input
-    ),
-    "claude-3-5-haiku-20241022": ModelPricing(
-        name="Claude 3.5 Haiku",
-        input_cost_per_mtok=0.80,
-        output_cost_per_mtok=4.0,
-        cache_write_cost_per_mtok=0.20,  # 25% of input
-        cache_read_cost_per_mtok=0.08,  # 10% of input
-    ),
-    # Claude 3 models
-    "claude-3-opus-20240229": ModelPricing(
-        name="Claude 3 Opus",
-        input_cost_per_mtok=15.0,
-        output_cost_per_mtok=75.0,
-        cache_write_cost_per_mtok=3.75,  # 25% of input
-        cache_read_cost_per_mtok=1.50,  # 10% of input
-    ),
-    "claude-3-sonnet-20240229": ModelPricing(
-        name="Claude 3 Sonnet",
-        input_cost_per_mtok=3.0,
-        output_cost_per_mtok=15.0,
-        cache_write_cost_per_mtok=0.75,  # 25% of input
-        cache_read_cost_per_mtok=0.30,  # 10% of input
-    ),
-    "claude-3-haiku-20240307": ModelPricing(
-        name="Claude 3 Haiku",
-        input_cost_per_mtok=0.25,
-        output_cost_per_mtok=1.25,
-        cache_write_cost_per_mtok=0.0625,  # 25% of input
-        cache_read_cost_per_mtok=0.025,  # 10% of input
-    ),
-    # Additional aliases
-    "claude-opus": ModelPricing(
-        name="Claude Opus",
-        input_cost_per_mtok=15.0,
-        output_cost_per_mtok=75.0,
-        cache_write_cost_per_mtok=3.75,
-        cache_read_cost_per_mtok=1.50,
-    ),
-    "claude-sonnet": ModelPricing(
-        name="Claude Sonnet",
-        input_cost_per_mtok=3.0,
-        output_cost_per_mtok=15.0,
-        cache_write_cost_per_mtok=0.75,
-        cache_read_cost_per_mtok=0.30,
-    ),
-    "claude-haiku": ModelPricing(
-        name="Claude Haiku",
-        input_cost_per_mtok=0.25,
-        output_cost_per_mtok=1.25,
-        cache_write_cost_per_mtok=0.0625,
-        cache_read_cost_per_mtok=0.025,
-    ),
-}
+
+def _load_pricing() -> dict[str, ModelPricing]:
+    """Load pricing from user config or bundled default."""
+    user_file = Path.home() / ".config" / "kalima" / "pricing.json"
+
+    if user_file.exists():
+        with open(user_file, "r") as f:
+            raw = json.load(f)
+    else:
+        ref = resources.files("kalima").joinpath("pricing_default.json")
+        raw = json.loads(ref.read_text(encoding="utf-8"))
+
+    models: dict[str, ModelPricing] = {}
+    for model_id, data in raw.items():
+        models[model_id] = ModelPricing(
+            name=data["name"],
+            input_cost_per_mtok=data["input"],
+            output_cost_per_mtok=data["output"],
+            cache_write_cost_per_mtok=data.get("cache_write", 0.0),
+            cache_read_cost_per_mtok=data.get("cache_read", 0.0),
+        )
+    return models
+
+
+def _get_pricing() -> dict[str, ModelPricing]:
+    """Get cached pricing data."""
+    global _pricing_cache
+    if _pricing_cache is None:
+        _pricing_cache = _load_pricing()
+    return _pricing_cache
 
 
 def get_model_pricing(model_name: str) -> ModelPricing:
     """Get pricing for a Claude model.
 
-    Falls back to Sonnet if model not found.
-
-    Args:
-        model_name: Model identifier (e.g., "claude-3-5-sonnet-20241022").
-
-    Returns:
-        ModelPricing object with cost calculations.
+    Tries exact match first, then fuzzy match by model family keyword.
+    Falls back to Sonnet 4.6 if unknown.
     """
-    # Exact match
-    if model_name in CLAUDE_MODELS:
-        return CLAUDE_MODELS[model_name]
+    models = _get_pricing()
 
-    # Fuzzy match: check if model name contains known models
+    if model_name in models:
+        return models[model_name]
+
     model_lower = model_name.lower()
 
-    if "opus" in model_lower:
-        if "3-5" in model_lower:
-            return CLAUDE_MODELS["claude-3-5-opus-20250514"]
-        return CLAUDE_MODELS["claude-3-opus-20240229"]
+    # Match by family keyword, preferring newer versions
+    families = [
+        ("opus-4-6", "claude-opus-4-6"),
+        ("opus-4-1", "claude-opus-4-1-20250805"),
+        ("opus", "claude-opus-4-6"),
+        ("sonnet-4-6", "claude-sonnet-4-6"),
+        ("sonnet-4-5", "claude-sonnet-4-5-20250929"),
+        ("sonnet-3-5", "claude-3-5-sonnet-20241022"),
+        ("sonnet", "claude-sonnet-4-6"),
+        ("haiku-4-5", "claude-haiku-4-5-20251001"),
+        ("haiku-3-5", "claude-3-5-haiku-20241022"),
+        ("haiku", "claude-haiku-4-5-20251001"),
+    ]
 
-    if "sonnet" in model_lower:
-        if "3-5" in model_lower:
-            return CLAUDE_MODELS["claude-3-5-sonnet-20241022"]
-        return CLAUDE_MODELS["claude-3-sonnet-20240229"]
+    for keyword, fallback_id in families:
+        if keyword in model_lower and fallback_id in models:
+            return models[fallback_id]
 
-    if "haiku" in model_lower:
-        if "3-5" in model_lower:
-            return CLAUDE_MODELS["claude-3-5-haiku-20241022"]
-        return CLAUDE_MODELS["claude-3-haiku-20240307"]
-
-    # Default to Sonnet if unknown
-    return CLAUDE_MODELS["claude-3-5-sonnet-20241022"]
+    # Default fallback
+    return models.get("claude-sonnet-4-6", next(iter(models.values())))
 
 
 def calculate_cost(
@@ -122,13 +90,6 @@ def calculate_cost(
 ) -> float:
     """Calculate total cost for a model and token usage.
 
-    Args:
-        model_name: Model identifier.
-        input_tokens: Number of input tokens.
-        output_tokens: Number of output tokens.
-        cache_write_tokens: Number of cache write tokens.
-        cache_read_tokens: Number of cache read tokens.
-
     Returns:
         Total cost in USD.
     """
@@ -139,9 +100,5 @@ def calculate_cost(
 
 
 def get_all_models() -> dict[str, str]:
-    """Get mapping of model names to display names.
-
-    Returns:
-        Dict of {model_id: display_name}.
-    """
-    return {model_id: pricing.name for model_id, pricing in CLAUDE_MODELS.items()}
+    """Get mapping of model names to display names."""
+    return {model_id: pricing.name for model_id, pricing in _get_pricing().items()}
